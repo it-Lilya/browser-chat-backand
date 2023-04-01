@@ -1,17 +1,14 @@
 const http = require('http');
 const Koa = require('koa');
-const Router = require('koa-router');
+
 const koaBody = require('koa-body');
+
 const WS = require('ws');
 
 const app = new Koa();
-const router = new Router();
-const users = [];
 
 app.use(koaBody({
-  urlencoded: true,    
-  multipart: true,
-  json: true,
+  urlencoded: true,
 }));
 
 app.use(async (ctx, next) => {
@@ -47,82 +44,60 @@ app.use(async (ctx, next) => {
 });
 
 
-router.post('/nicknames', async (ctx, next) => {
-  const {nickname} = ctx.request.body;
-  if (users.some(sub => sub.nickname === nickname)) {
-    ctx.response.status = 400;
-    ctx.response.body = { status: "Псевдоним уже зарегистрирован" };
-    return;
-  };
-  users.push({ nickname });
-  console.log(users);
-  ctx.response.body = { status: "Псевдоним зарегистрирован!" };
-  next();
+const Router = require('koa-router');
+
+const router = new Router();
+
+const users = [];
+let user;
+
+router.post('/nicknames', (ctx) => {
+    const { nickname } = ctx.request.body;
+  
+    ctx.response.set('Access-Control-Allow-Origin', '*');
+    if (users.some(sub => sub.nickname === nickname)) {
+      ctx.response.status = 400;
+      
+      return ctx.response.body = { status: 'Псевдоним уже существует!'}
+    }
+
+    users.push({ nickname });
+    ctx.response.body = { status: "OK" };
 });
 
-router.get('/users', async (ctx, next) => {
-  ctx.request.body = users;
-  ctx.response.status = 200;
-  console.log()
-  next();
+router.get('/nicknames-list', async (ctx) => {
+  ctx.response.body = users;
 });
+
 
 app.use(router.routes()).use(router.allowedMethods());
 
 
-const port = process.env.PORT || 1000;
+const port = process.env.PORT || 3000;
 const server = http.createServer(app.callback());
-
 
 const wsServer = new WS.Server({
   server
 });
 
-// const chat = [];
-// wsServer.on('connection', (ws) => {
-//   ws.on('message', (message) => {
-//     console.log(message)
-// //     chat.push(message);
-//     // console.log(chat)
-// //     // const eventData = JSON.stringify({ chat: [message] });
-// //     // Array.from(wsServer.clients)
-// //     // .filter(client => client.readyState === WS.OPEN)
-// //     // .forEach(client => client.send(eventData));
-// //     if (body.type === 'authorization') {
-// //       if (users.includes(body.name)) {
-// //           body.name = false;
-// //           ws.send(JSON.stringify(body));
-// //       } else {
-// //           users.push(body.name);
-// //           ws.send(msg);
-// //           wsServer.clients.forEach(client => {
-// //               if (client.readyState === WS.OPEN) {
-// //                   client.send(JSON.stringify(users));
-// //               }
-// //           })
-// //       }
-// //   }
+const chat = [];
 
-// //   if (body.type === 'message') {
-// //       wsServer.clients.forEach(client => {
-// //           if (client.readyState === WS.OPEN) {
-// //               client.send(JSON.stringify(body));
-// //           }
-// //       })
-// //   }
+wsServer.on('connection', (ws) => {
+  ws.on('message', (message) => {
+    user = JSON.parse(message);
 
-// //   if (body.type === 'disconnect') {
-// //       const index = users.indexOf(body.name);
-// //       users.splice(index, 1);
-// //       wsServer.clients.forEach(client => {
-// //           if (client.readyState === WS.OPEN) {
-// //               client.send(JSON.stringify(users));
-// //           }
-// //       })
-//   // }
-  // });
-//   // ws.send(JSON.stringify({ chat }));
-// });
+    chat.push(message);
+    const eventData = JSON.stringify({ chat: [message] });
+
+    Array.from(wsServer.clients)
+      .filter(client => client.readyState === WS.OPEN)
+      .forEach(client => client.send(eventData));
+  });
+
+
+  ws.send(JSON.stringify({ chat }));
+});
+
 
 
 server.listen(port);
